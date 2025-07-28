@@ -139,6 +139,14 @@
             </fieldset>
         </div>
 
+        <fieldset>
+            <legend>对齐与裁剪模式</legend>
+            <div class="grid">
+                <label><input type="radio" name="align_mode" value="uniform_width" checked> 统一宽度 (裁剪过高图片)</label>
+                <label><input type="radio" name="align_mode" value="uniform_height"> 统一高度 (裁剪过宽图片)</label>
+            </div>
+        </fieldset>
+
         <div id="form-group-quality">
             <label for="quality">质量 <span id="quality-preview"></span></label>
             <input type="range" min="0.1" max="1" step="0.01" value="0.8" name="quality" id="quality">
@@ -437,6 +445,15 @@ function updateQualityPreview() {
 qualitySlider.addEventListener('input', updateQualityPreview);
 updateQualityPreview(); // Initial value
 
+function formatBytes(bytes, decimals = 2) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+}
+
 
 function onCombine() {
     if (IMAGES.length === 0) {
@@ -456,44 +473,89 @@ function onCombine() {
         var BORDER = parseInt(document.getElementById('border-width').value) || 0;
         var BORDER_COLOR = document.getElementById('border-color').value || '#FFFFFF';
         var isHorizontal = orientation === 'horizontally';
+        var alignMode = document.querySelector('input[name="align_mode"]:checked').value;
 
         var canvas = document.createElement('canvas');
         var ctx = canvas.getContext('2d');
         ctx.fillStyle = BORDER_COLOR;
 
         if (isHorizontal) {
-            const totalImageWidth = SUM.apply(window, IMAGES.map(item => item.originalImage.width));
-            const uniformWidth = totalImageWidth / IMAGES.length;
+            if (alignMode === 'uniform_width') {
+                // --- UNIFY WIDTH LOGIC (Crop taller images) ---
+                const totalImageWidth = SUM.apply(window, IMAGES.map(item => item.originalImage.width));
+                const uniformWidth = totalImageWidth / IMAGES.length;
 
-            let totalCanvasWidth = 0;
-            let maxCanvasHeight = 0;
+                let minScaledHeight = Infinity;
+                const scaledImages = IMAGES.map(item => {
+                    const scale = uniformWidth / item.originalImage.width;
+                    const scaledHeight = item.originalImage.height * scale;
+                    if (scaledHeight < minScaledHeight) {
+                        minScaledHeight = scaledHeight;
+                    }
+                    return { image: item.originalImage, width: uniformWidth, height: scaledHeight };
+                });
 
-            const scaledImages = IMAGES.map(item => {
-                const scale = uniformWidth / item.originalImage.width;
-                const scaledHeight = item.originalImage.height * scale;
-                if (scaledHeight > maxCanvasHeight) {
-                    maxCanvasHeight = scaledHeight;
-                }
-                return { 
-                    image: item.originalImage, 
-                    width: uniformWidth, 
-                    height: scaledHeight 
-                };
-            });
+                const cellWidth = uniformWidth;
+                const cellHeight = minScaledHeight;
 
-            totalCanvasWidth = uniformWidth * IMAGES.length + (IMAGES.length + 1) * BORDER;
-            maxCanvasHeight += BORDER * 2;
+                const totalCanvasWidth = (cellWidth * IMAGES.length) + (BORDER * (IMAGES.length + 1));
+                const totalCanvasHeight = cellHeight + (BORDER * 2);
 
-            canvas.width = totalCanvasWidth;
-            canvas.height = maxCanvasHeight;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+                canvas.width = totalCanvasWidth;
+                canvas.height = totalCanvasHeight;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            let offsetX = BORDER;
-            scaledImages.forEach(img => {
-                const offsetY = (maxCanvasHeight - img.height) / 2; // Vertical centering
-                ctx.drawImage(img.image, offsetX, offsetY, img.width, img.height);
-                offsetX += img.width + BORDER;
-            });
+                let offsetX = BORDER;
+                scaledImages.forEach(img => {
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.fillRect(offsetX, BORDER, cellWidth, cellHeight);
+
+                    const scaleToFitCell = cellWidth / img.image.width;
+                    const sourceHeight = cellHeight / scaleToFitCell;
+                    const sourceY = (img.image.height - sourceHeight) / 2;
+                    
+                    ctx.drawImage(img.image, 0, sourceY, img.image.width, sourceHeight, offsetX, BORDER, cellWidth, cellHeight);
+                    offsetX += cellWidth + BORDER;
+                });
+
+            } else { // alignMode === 'uniform_height'
+                // --- UNIFY HEIGHT LOGIC (Crop wider images) ---
+                const totalImageHeight = SUM.apply(window, IMAGES.map(item => item.originalImage.height));
+                const uniformHeight = totalImageHeight / IMAGES.length;
+
+                let minScaledWidth = Infinity;
+                const scaledImages = IMAGES.map(item => {
+                    const scale = uniformHeight / item.originalImage.height;
+                    const scaledWidth = item.originalImage.width * scale;
+                    if (scaledWidth < minScaledWidth) {
+                        minScaledWidth = scaledWidth;
+                    }
+                    return { image: item.originalImage, width: scaledWidth, height: uniformHeight };
+                });
+
+                const cellWidth = minScaledWidth;
+                const cellHeight = uniformHeight;
+
+                const totalCanvasWidth = (cellWidth * IMAGES.length) + (BORDER * (IMAGES.length + 1));
+                const totalCanvasHeight = cellHeight + (BORDER * 2);
+
+                canvas.width = totalCanvasWidth;
+                canvas.height = totalCanvasHeight;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                let offsetX = BORDER;
+                scaledImages.forEach(img => {
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.fillRect(offsetX, BORDER, cellWidth, cellHeight);
+
+                    const scaleToFitCell = cellHeight / img.image.height;
+                    const sourceWidth = cellWidth / scaleToFitCell;
+                    const sourceX = (img.image.width - sourceWidth) / 2;
+
+                    ctx.drawImage(img.image, sourceX, 0, sourceWidth, img.image.height, offsetX, BORDER, cellWidth, cellHeight);
+                    offsetX += cellWidth + BORDER;
+                });
+            }
 
         } else { // Vertically (current logic remains, as requested)
             var totalHeight = SUM.apply(window, IMAGES.map(function(item) { return item.originalImage.height; })) + (IMAGES.length + 1) * BORDER;
@@ -547,11 +609,16 @@ function onCombine() {
 
         scaledCanvas.toBlob(function(blob) {
             var blobURL = URL.createObjectURL(blob);
+            var imageInfo = `尺寸: ${scaledCanvas.width} x ${scaledCanvas.height}px | 大小: ${formatBytes(blob.size)}`;
+
             var html = [];
             html.push('<label>结果</label>');
             html.push('<article>');
-            html.push('<a href="' + blobURL + '" download="' + fileName + '" role="button">下载图片</a>');
-            html.push('<a href="' + blobURL + '" target="_blank" role="button" class="secondary" style="margin-left: 10px;">新窗口打开</a>');
+            html.push('<p>' + imageInfo + '</p>');
+            html.push('<div class="grid">');
+            html.push('  <a href="' + blobURL + '" download="' + fileName + '" role="button">下载图片</a>');
+            html.push('  <a href="' + blobURL + '" target="_blank" role="button" class="secondary">新窗口打开</a>');
+            html.push('</div>');
             html.push('<img src="' + blobURL + '">');
             html.push('</article>');
             $result.innerHTML = html.join('');
