@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>在线拼图 - 免费、安全、快速</title>
+<meta name="description" content="在线免费将多张图片合并为一张长图。支持横向和纵向拼接，自定义边框和尺寸。所有操作均在您的浏览器中完成，我们不上传、不存储您的任何图片。">
+<meta name="keywords" content="在线拼图, 拼接长图, 免费拼图, 合并图片, 长图生成器, 图片合并, 安全拼图, 纯前端拼图">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
+<style>
+    /* Custom styles for specific components */
+    :root {
+        --spacing: 0.5rem;
+    }
+
+    body {
+        padding: 1rem;
+    }
+
+    main.container {
+        padding: 2rem 1rem;
+    }
+
+    .droper {
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        bottom: 10px;
+        left: 10px;
+        z-index: 99999;
+        border: 3px var(--primary-focus) dashed;
+        border-radius: var(--border-radius);
+        display: none;
+        place-content: center;
+        font-size: 1.5rem;
+        color: #fff;
+		font-style: italic;
+    }
+
+    .droper::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background-color: var(--contrast);
+        opacity: 0.3;
+        border-radius: inherit;
+    }
+
+    .droper::after {
+        content: attr(data-text);
+    }
+
+    .droper.active {
+        display: grid;
+    }
+
+    #list-files li {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.5rem;
+        border-radius: var(--border-radius);
+        margin-bottom: 0.5rem;
+    }
+
+    #list-files li.dragging {
+        opacity: 0.5;
+    }
+
+    #list-files li.drag-over-border {
+        border-top: 2px solid var(--primary);
+    }
+
+    .drag-handle {
+        cursor: move;
+        padding: 0 0.5rem;
+        font-size: 1.5rem;
+        color: var(--secondary);
+    }
+
+    .file-preview {
+        width: 60px;
+        height: 60px;
+        object-fit: cover;
+        border-radius: var(--border-radius);
+    }
+
+    .file-name {
+        flex-grow: 1;
+        word-break: break-all;
+    }
+
+    .file-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .file-actions button {
+        --padding-vertical: 0.25rem;
+        --padding-horizontal: 0.75rem;
+    }
+
+    #result img {
+        max-width: 100%;
+        height: auto;
+        margin-top: 1rem;
+    }
+    
+    #custom-size {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+    }
+</style>
+</head>
+<body>
+
+<main class="container">
+    <hgroup>
+        <h1>图片拼接工具</h1>
+        <p>不上传、不留存、不扫描、不识别, 100%安全</p>
+    </hgroup>
+
+    <form name="form-combine" id="form-combine" onsubmit="return onCombine()">
+        <div class="grid">
+            <fieldset>
+                <legend>模式</legend>
+                <label><input type="radio" name="orientation" value="vertically"> 纵向 (垂直)</label>
+                <label><input type="radio" name="orientation" checked="checked" value="horizontally"> 横向 (水平)</label>
+            </fieldset>
+            <fieldset>
+                <legend>格式</legend>
+                <label><input type="radio" name="mimetype" onclick="change(this, 'mimetype')" checked="checked" value="image/jpeg"> JPEG</label>
+                <label><input type="radio" name="mimetype" onclick="change(this, 'mimetype')" value="image/png"> PNG</label>
+            </fieldset>
+        </div>
+
+        <div id="form-group-quality">
+            <label for="quality">质量 <span id="quality-preview"></span></label>
+            <input type="range" min="0.1" max="1" step="0.01" value="0.8" name="quality" id="quality">
+        </div>
+
+        <div class="grid">
+            <label for="preset-size">
+                尺寸
+                <select id="preset-size">
+                    <option value="">原始尺寸</option>
+                    <option value="2560x1440">2560x1440</option>
+                    <option value="1920x1080">1920x1080</option>
+                    <option value="1080x1920">1080x1920</option>
+                    <option value="800x600">800x600</option>
+                    <option value="自定义">自定义</option>
+                </select>
+            </label>
+            <div id="custom-size" style="display:none;">
+                <label for="custom-width">宽 <input type="number" id="custom-width" min="1"></label>
+                <label for="custom-height">高 <input type="number" id="custom-height" min="1"></label>
+            </div>
+        </div>
+        
+        <div class="grid">
+            <label for="border-width">
+                边框宽度 (px)
+                <input type="number" id="border-width" value="10" min="0" max="100" step="10">
+            </label>
+            <label for="border-color">
+                边框颜色
+                <input type="color" id="border-color" value="#000000">
+            </label>
+        </div>
+
+        <label for="btn-choose">文件</label>
+        <ul id="list-files" style="list-style-type: none; padding: 0;"></ul>
+        <button type="button" id="btn-choose" class="contrast">+&nbsp;选择&nbsp;/&nbsp;拖拽&nbsp;/&nbsp;粘贴&nbsp;文件至此</button>
+
+        <div class="grid" style="margin-top: 2rem;">
+            <button type="submit" id="btn-combine">合并</button>
+            <button type="reset" id="btn-reset" class="secondary">重置</button>
+        </div>
+
+        <div id="result" style="margin-top: 2rem;"></div>
+    </form>
+</main>
+
+<div class="droper" id="droper" data-text="将文件拖放到这里"></div>
+
+<script>
+var IMAGES = [];
+var $form = document.querySelector('#form-combine');
+var $btnChoose = document.querySelector('#btn-choose');
+var $btnCombine = document.querySelector('#btn-combine');
+var $btnReset = document.querySelector('#btn-reset');
+var $list = document.querySelector('#list-files');
+var $result = document.querySelector('#result');
+var $droper = document.querySelector('#droper');
+
+$list.addEventListener('click', function(e) {
+    const button = e.target.closest('button[data-action]');
+    if (!button) return;
+
+    e.preventDefault();
+    const action = button.dataset.action;
+    const index = parseInt(button.dataset.index || -1);
+
+    if (index === -1) return;
+
+    const clickedLi = button.closest('li');
+
+    switch (action) {
+        case 'remove':
+            if (confirm('确定要移除这张图片吗？')) {
+                IMAGES.splice(index, 1);
+                renderImagesList(); // For remove, a full re-render is acceptable and simpler.
+            }
+            break;
+        case 'move-up':
+            if (index > 0) {
+                const previousLi = clickedLi.previousElementSibling;
+                if (previousLi) {
+                    // 1. Swap in data array
+                    [IMAGES[index], IMAGES[index - 1]] = [IMAGES[index - 1], IMAGES[index]];
+                    // 2. Swap in DOM (much faster than re-rendering)
+                    $list.insertBefore(clickedLi, previousLi);
+                    // 3. Update data-index attributes on the swapped items
+                    clickedLi.querySelectorAll('button[data-index]').forEach(btn => btn.dataset.index = index - 1);
+                    previousLi.querySelectorAll('button[data-index]').forEach(btn => btn.dataset.index = index);
+                }
+            }
+            break;
+        case 'move-down':
+            if (index < IMAGES.length - 1) {
+                const nextLi = clickedLi.nextElementSibling;
+                if (nextLi) {
+                    // 1. Swap in data array
+                    [IMAGES[index], IMAGES[index + 1]] = [IMAGES[index + 1], IMAGES[index]];
+                    // 2. Swap in DOM
+                    $list.insertBefore(nextLi, clickedLi);
+                    // 3. Update data-index attributes
+                    clickedLi.querySelectorAll('button[data-index]').forEach(btn => btn.dataset.index = index + 1);
+                    nextLi.querySelectorAll('button[data-index]').forEach(btn => btn.dataset.index = index);
+                }
+            }
+            break;
+    }
+});
+
+// --- Drag and Drop Sorting ---
+let draggedItem = null;
+let dragInitiator = null;
+
+$list.addEventListener('mousedown', e => {
+    const handle = e.target.closest('.drag-handle');
+    if (handle) {
+        // Set the initiator if the mousedown was on a handle.
+        // The actual li to be dragged is found in dragstart.
+        dragInitiator = handle;
+    } else {
+        dragInitiator = null;
+    }
+});
+
+$list.addEventListener('dragstart', function(e) {
+    // If the drag was not initiated by our handle, cancel it.
+    if (!dragInitiator) {
+        e.preventDefault();
+        return;
+    }
+
+    const targetLi = dragInitiator.closest('li');
+    if (!targetLi) return;
+
+    draggedItem = targetLi;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', draggedItem.innerHTML);
+
+    setTimeout(() => {
+        draggedItem.classList.add('dragging');
+    }, 0);
+});
+
+$list.addEventListener('dragend', function(e) {
+    if (draggedItem) {
+        draggedItem.classList.remove('dragging');
+    }
+    draggedItem = null;
+    dragInitiator = null; // Reset initiator on drag end
+});
+
+$list.addEventListener('dragover', function(e) {
+    e.preventDefault(); // Necessary to allow dropping
+    const targetLi = e.target.closest('li');
+    if (!targetLi || targetLi === draggedItem) return;
+
+    // Add a visual indicator
+    $list.querySelectorAll('li').forEach(li => li.classList.remove('drag-over-border'));
+    targetLi.classList.add('drag-over-border');
+});
+
+$list.addEventListener('dragleave', function(e) {
+    const targetLi = e.target.closest('li');
+    if (targetLi) {
+        targetLi.classList.remove('drag-over-border');
+    }
+});
+
+$list.addEventListener('drop', function(e) {
+    e.preventDefault();
+    const targetLi = e.target.closest('li');
+    if (!targetLi || targetLi === draggedItem) return;
+
+    targetLi.classList.remove('drag-over-border');
+
+    const fromIndex = parseInt(draggedItem.dataset.index);
+    const toIndex = parseInt(targetLi.dataset.index);
+
+    // Reorder the data array
+    const [movedItem] = IMAGES.splice(fromIndex, 1);
+    IMAGES.splice(toIndex, 0, movedItem);
+
+    // Re-render the entire list to reflect the new order
+    renderImagesList();
+});
+
+function renderImagesList() {
+    var html = [];
+    for (var i = 0; i < IMAGES.length; i++) {
+        html.push('<li draggable="true" data-index="' + i + '">');
+        html.push('<span class="drag-handle" title="拖动排序">&#x2630;</span>'); // Drag handle icon
+        html.push('<img src="' + IMAGES[i].thumbnailSrc + '" class="file-preview" alt="预览">');
+        html.push('<span class="file-name">' + IMAGES[i].fileInfo.name + '</span>');
+        html.push('<span class="file-actions">');
+        html.push('<button type="button" class="outline secondary" title="上移" data-index="' + i + '" data-action="move-up">↑</button>');
+        html.push('<button type="button" class="outline secondary" title="下移" data-index="' + i + '" data-action="move-down">↓</button>');
+        html.push('<button type="button" class="outline contrast" title="移除" data-index="' + i + '" data-action="remove">×</button>');
+        html.push('</span>');
+        html.push('</li>');
+    }
+    $list.innerHTML = html.join('');
+}
+
+function loadImages(files, callback) {
+    callback = callback || function() {
+        renderImagesList();
+    };
+
+    files = Array.prototype.slice.call(files || []);
+    if (files.length === 0) return;
+
+    const createThumbnail = (image, fileInfo) => {
+        const MAX_SIZE = 200; // Thumbnail max size in pixels
+        let width = image.width;
+        let height = image.height;
+
+        if (width > height) {
+            if (width > MAX_SIZE) {
+                height *= MAX_SIZE / width;
+                width = MAX_SIZE;
+            }
+        } else {
+            if (height > MAX_SIZE) {
+                width *= MAX_SIZE / height;
+                height = MAX_SIZE;
+            }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(image, 0, 0, width, height);
+        const thumbnailSrc = canvas.toDataURL('image/jpeg', 0.7); // Use compressed JPEG for thumbnails
+
+        IMAGES.push({
+            originalImage: image,
+            thumbnailSrc: thumbnailSrc,
+            fileInfo: fileInfo
+        });
+    };
+
+    let loadedCount = 0;
+    files.forEach(file => {
+        if (!file.type.startsWith('image/')) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const image = new Image();
+            image.onload = function() {
+                const fileInfo = {
+                    name: file.name,
+                    size: file.size,
+                    type: file.type,
+                };
+                createThumbnail(this, fileInfo);
+                loadedCount++;
+                if (loadedCount === files.length) {
+                    callback();
+                }
+            };
+            image.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
+function SUM(v1, v2, v3) {
+    var args = Array.prototype.slice.call(arguments);
+    return args.reduce((acc, val) => parseInt(acc) + parseInt(val), 0);
+}
+
+function MAX(v1, v2, v3) {
+    var args = Array.prototype.slice.call(arguments);
+    return args && args.length && args[0] !== undefined ? Math.max.apply(window, args) : 0;
+}
+
+function change(target, key) {
+    if (target && key) {
+        if (key == 'mimetype') {
+            var $groupItem = document.querySelector('#form-group-quality');
+            $groupItem.style.display = (target.value == 'image/jpeg') ? 'block' : 'none';
+        }
+    }
+}
+
+document.getElementById('preset-size').addEventListener('change', function() {
+    document.getElementById('custom-size').style.display = (this.value === '自定义') ? 'grid' : 'none';
+});
+
+// Quality preview
+var qualitySlider = document.getElementById('quality');
+var qualityPreview = document.getElementById('quality-preview');
+function updateQualityPreview() {
+    qualityPreview.textContent = '(' + parseFloat(qualitySlider.value).toFixed(2) + ')';
+}
+qualitySlider.addEventListener('input', updateQualityPreview);
+updateQualityPreview(); // Initial value
+
+
+function onCombine() {
+    if (IMAGES.length === 0) {
+        alert('请先添加图片文件');
+        return false;
+    }
+
+    $btnCombine.setAttribute('aria-busy', 'true');
+    $btnCombine.innerText = '处理中...';
+
+    // Use a timeout to allow the UI to update before the heavy processing begins
+    setTimeout(function() {
+        var orientation = document.querySelector('input[name="orientation"]:checked').value;
+        var mimetype = document.querySelector('input[name="mimetype"]:checked').value;
+        var quality = parseFloat(document.querySelector('input[name="quality"]').value);
+
+        var preset = document.getElementById('preset-size').value;
+        var customW = parseInt(document.getElementById('custom-width').value) || 0;
+        var customH = parseInt(document.getElementById('custom-height').value) || 0;
+
+        var BORDER = parseInt(document.getElementById('border-width').value) || 0;
+        var BORDER_COLOR = document.getElementById('border-color').value || '#FFFFFF';
+        var isHorizontal = orientation === 'horizontally';
+
+        var canvas = document.createElement('canvas');
+        var ctx = canvas.getContext('2d');
+        ctx.fillStyle = BORDER_COLOR;
+
+        if (isHorizontal) {
+            var totalWidth = SUM.apply(window, IMAGES.map(function(item) { return item.originalImage.width; })) + (IMAGES.length + 1) * BORDER;
+            var maxHeight = MAX.apply(window, IMAGES.map(function(item){ return item.originalImage.height; }));
+            canvas.width = totalWidth;
+            canvas.height = maxHeight + BORDER * 2;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            var offsetX = BORDER;
+            IMAGES.forEach(function(item) {
+                ctx.drawImage(item.originalImage, offsetX, BORDER, item.originalImage.width, item.originalImage.height);
+                offsetX += item.originalImage.width + BORDER;
+            });
+        } else { // Vertically
+            var totalHeight = SUM.apply(window, IMAGES.map(function(item) { return item.originalImage.height; })) + (IMAGES.length + 1) * BORDER;
+            var maxWidth = MAX.apply(window, IMAGES.map(function(item){ return item.originalImage.width; }));
+            canvas.width = maxWidth + BORDER * 2;
+            canvas.height = totalHeight;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            var offsetY = BORDER;
+            IMAGES.forEach(function(item) {
+                ctx.drawImage(item.originalImage, BORDER, offsetY, item.originalImage.width, item.originalImage.height);
+                offsetY += item.originalImage.height + BORDER;
+            });
+        }
+
+        var targetW = canvas.width;
+        var targetH = canvas.height;
+
+        if (preset === '自定义' && (customW > 0 || customH > 0)) {
+            if (customW > 0 && customH > 0) {
+                targetW = customW;
+                targetH = customH;
+            } else if (customW > 0) {
+                targetW = customW;
+                targetH = Math.round(canvas.height * (customW / canvas.width));
+            } else { // customH > 0
+                targetH = customH;
+                targetW = Math.round(canvas.width * (customH / canvas.height));
+            }
+        } else if (preset && preset !== '自定义') {
+            var arr = preset.split('x');
+            if (arr.length === 2) {
+                targetW = parseInt(arr[0]);
+                targetH = parseInt(arr[1]);
+            }
+        }
+        
+        var scaledCanvas = document.createElement('canvas');
+        scaledCanvas.width = targetW;
+        scaledCanvas.height = targetH;
+        var scaledCtx = scaledCanvas.getContext('2d');
+        if (mimetype == 'image/jpeg') {
+            scaledCtx.fillStyle = BORDER_COLOR;
+            scaledCtx.fillRect(0, 0, scaledCanvas.width, scaledCanvas.height);
+        }
+        scaledCtx.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, targetW, targetH);
+
+        var fileName = 'pintu-fulicat.com-' + (new Date()).getTime();
+        fileName += (mimetype == 'image/jpeg') ? '.jpg' : '.png';
+
+        scaledCanvas.toBlob(function(blob) {
+            var blobURL = URL.createObjectURL(blob);
+            var html = [];
+            html.push('<label>结果</label>');
+            html.push('<article>');
+            html.push('<a href="' + blobURL + '" download="' + fileName + '" role="button">下载图片</a>');
+            html.push('<a href="' + blobURL + '" target="_blank" role="button" class="secondary" style="margin-left: 10px;">新窗口打开</a>');
+            html.push('<img src="' + blobURL + '">');
+            html.push('</article>');
+            $result.innerHTML = html.join('');
+            
+            $btnCombine.removeAttribute('aria-busy');
+            $btnCombine.innerText = '合并';
+        }, mimetype, quality);
+
+    }, 100); // End of setTimeout
+
+    return false;
+}
+
+$btnChoose.addEventListener('click', function(e) {
+    var $input = document.createElement('input');
+    $input.setAttribute('type', 'file');
+    $input.setAttribute('name', 'file');
+    $input.setAttribute('accept', 'image/*');
+    $input.setAttribute('multiple', 'multiple');
+    $input.addEventListener('change', function(evt) {
+        loadImages(evt.target.files);
+    }, false);
+    $input.click();
+}, false);
+
+$btnReset.addEventListener('click', function(e) {
+    IMAGES = [];
+    $list.innerHTML = '';
+    $result.innerHTML = '';
+}, false);
+
+// --- Drag and Drop & Paste Listeners ---
+document.addEventListener('dragleave', function(e) { 
+    // Prevent the dropzone from flickering when dragging over child elements
+    if (e.relatedTarget === null || !e.currentTarget.contains(e.relatedTarget)) {
+        $droper.classList.remove('active');
+    }
+}, false);
+document.addEventListener('drop', function(e) {
+    e.preventDefault();
+    $droper.classList.remove('active');
+}, false);
+document.addEventListener('dragenter', function(e) {
+    e.preventDefault();
+    // Only show the dropzone if actual files are being dragged from the OS
+    if (e.dataTransfer.types.includes('Files')) {
+        $droper.classList.add('active');
+    }
+}, false);
+document.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    // Same check for dragover
+    if (e.dataTransfer.types.includes('Files')) {
+        $droper.classList.add('active');
+    }
+}, false);
+
+$droper.addEventListener('drop', function(e) {
+    e.preventDefault();
+    if (e.dataTransfer && e.dataTransfer.files) {
+        loadImages(e.dataTransfer.files);
+    }
+    $droper.classList.remove('active');
+});
+
+window.addEventListener('paste', function(e) {
+    var items = e.clipboardData.items;
+    var files = [];
+    for (var i = 0; i < items.length; i++) {
+        if (items[i].kind === 'file' && items[i].type.startsWith('image/')) {
+            var file = items[i].getAsFile();
+            if (file) {
+                files.push(file);
+            }
+        }
+    }
+    if (files.length > 0) {
+        loadImages(files);
+    }
+});
+</script>
+
+</body>
+</html>
