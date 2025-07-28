@@ -20,6 +20,10 @@
     main.container {
         padding: 2rem 1rem;
     }
+    
+    button {
+      cursor: pointer;
+    }
 
     .droper {
         position: fixed;
@@ -34,7 +38,7 @@
         place-content: center;
         font-size: 1.5rem;
         color: #fff;
-		font-style: italic;
+		    font-style: italic;
     }
 
     .droper::before {
@@ -145,16 +149,15 @@
                 尺寸
                 <select id="preset-size">
                     <option value="">原始尺寸</option>
-                    <option value="2560x1440">2560x1440</option>
-                    <option value="1920x1080">1920x1080</option>
-                    <option value="1080x1920">1080x1920</option>
-                    <option value="800x600">800x600</option>
-                    <option value="自定义">自定义</option>
+                    <option value="2560" data-constraint="width">最大宽度: 2560px</option>
+                    <option value="1920" data-constraint="width">最大宽度: 1920px</option>
+                    <option value="1080" data-constraint="height">最大高度: 1080px</option>
+                    <option value="800" data-constraint="width">最大宽度: 800px</option>
+                    <option value="custom">自定义宽度</option>
                 </select>
             </label>
             <div id="custom-size" style="display:none;">
                 <label for="custom-width">宽 <input type="number" id="custom-width" min="1"></label>
-                <label for="custom-height">高 <input type="number" id="custom-height" min="1"></label>
             </div>
         </div>
         
@@ -422,7 +425,7 @@ function change(target, key) {
 }
 
 document.getElementById('preset-size').addEventListener('change', function() {
-    document.getElementById('custom-size').style.display = (this.value === '自定义') ? 'grid' : 'none';
+    document.getElementById('custom-size').style.display = (this.value === 'custom') ? 'grid' : 'none';
 });
 
 // Quality preview
@@ -450,10 +453,6 @@ function onCombine() {
         var mimetype = document.querySelector('input[name="mimetype"]:checked').value;
         var quality = parseFloat(document.querySelector('input[name="quality"]').value);
 
-        var preset = document.getElementById('preset-size').value;
-        var customW = parseInt(document.getElementById('custom-width').value) || 0;
-        var customH = parseInt(document.getElementById('custom-height').value) || 0;
-
         var BORDER = parseInt(document.getElementById('border-width').value) || 0;
         var BORDER_COLOR = document.getElementById('border-color').value || '#FFFFFF';
         var isHorizontal = orientation === 'horizontally';
@@ -463,18 +462,40 @@ function onCombine() {
         ctx.fillStyle = BORDER_COLOR;
 
         if (isHorizontal) {
-            var totalWidth = SUM.apply(window, IMAGES.map(function(item) { return item.originalImage.width; })) + (IMAGES.length + 1) * BORDER;
-            var maxHeight = MAX.apply(window, IMAGES.map(function(item){ return item.originalImage.height; }));
-            canvas.width = totalWidth;
-            canvas.height = maxHeight + BORDER * 2;
+            const totalImageWidth = SUM.apply(window, IMAGES.map(item => item.originalImage.width));
+            const uniformWidth = totalImageWidth / IMAGES.length;
+
+            let totalCanvasWidth = 0;
+            let maxCanvasHeight = 0;
+
+            const scaledImages = IMAGES.map(item => {
+                const scale = uniformWidth / item.originalImage.width;
+                const scaledHeight = item.originalImage.height * scale;
+                if (scaledHeight > maxCanvasHeight) {
+                    maxCanvasHeight = scaledHeight;
+                }
+                return { 
+                    image: item.originalImage, 
+                    width: uniformWidth, 
+                    height: scaledHeight 
+                };
+            });
+
+            totalCanvasWidth = uniformWidth * IMAGES.length + (IMAGES.length + 1) * BORDER;
+            maxCanvasHeight += BORDER * 2;
+
+            canvas.width = totalCanvasWidth;
+            canvas.height = maxCanvasHeight;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            var offsetX = BORDER;
-            IMAGES.forEach(function(item) {
-                ctx.drawImage(item.originalImage, offsetX, BORDER, item.originalImage.width, item.originalImage.height);
-                offsetX += item.originalImage.width + BORDER;
+            let offsetX = BORDER;
+            scaledImages.forEach(img => {
+                const offsetY = (maxCanvasHeight - img.height) / 2; // Vertical centering
+                ctx.drawImage(img.image, offsetX, offsetY, img.width, img.height);
+                offsetX += img.width + BORDER;
             });
-        } else { // Vertically
+
+        } else { // Vertically (current logic remains, as requested)
             var totalHeight = SUM.apply(window, IMAGES.map(function(item) { return item.originalImage.height; })) + (IMAGES.length + 1) * BORDER;
             var maxWidth = MAX.apply(window, IMAGES.map(function(item){ return item.originalImage.width; }));
             canvas.width = maxWidth + BORDER * 2;
@@ -491,22 +512,23 @@ function onCombine() {
         var targetW = canvas.width;
         var targetH = canvas.height;
 
-        if (preset === '自定义' && (customW > 0 || customH > 0)) {
-            if (customW > 0 && customH > 0) {
-                targetW = customW;
-                targetH = customH;
-            } else if (customW > 0) {
+        const selectedOption = document.getElementById('preset-size').selectedOptions[0];
+        const constraint = selectedOption.dataset.constraint;
+        const value = parseInt(selectedOption.value);
+
+        if (constraint && value > 0) {
+            if (constraint === 'width' && canvas.width > value) {
+                targetW = value;
+                targetH = Math.round(canvas.height * (value / canvas.width));
+            } else if (constraint === 'height' && canvas.height > value) {
+                targetH = value;
+                targetW = Math.round(canvas.width * (value / canvas.height));
+            }
+        } else if (selectedOption.value === 'custom') {
+            const customW = parseInt(document.getElementById('custom-width').value) || 0;
+            if (customW > 0 && canvas.width > customW) {
                 targetW = customW;
                 targetH = Math.round(canvas.height * (customW / canvas.width));
-            } else { // customH > 0
-                targetH = customH;
-                targetW = Math.round(canvas.width * (customH / canvas.height));
-            }
-        } else if (preset && preset !== '自定义') {
-            var arr = preset.split('x');
-            if (arr.length === 2) {
-                targetW = parseInt(arr[0]);
-                targetH = parseInt(arr[1]);
             }
         }
         
