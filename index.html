@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>在线拼图 - 免费、安全、快速</title>
+<title>PicoStitch - 在线图片拼接工具</title>
 <meta name="description" content="在线免费将多张图片合并为一张长图。支持横向和纵向拼接，自定义边框和尺寸。所有操作均在您的浏览器中完成，我们不上传、不存储您的任何图片。">
 <meta name="keywords" content="在线拼图, 拼接长图, 免费拼图, 合并图片, 长图生成器, 图片合并, 安全拼图, 纯前端拼图">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
@@ -139,7 +139,7 @@
     </div>
 
     <hgroup>
-        <h1>图片拼接工具</h1>
+        <h1>PicoStitch</h1>
         <p>不上传、不留存、不扫描、不识别, 100%安全</p>
     </hgroup>
 
@@ -182,21 +182,33 @@
                     <option value="1080" data-constraint="height">最大高度: 1080px</option>
                     <option value="800" data-constraint="width">最大宽度: 800px</option>
                     <option value="custom">自定义宽度</option>
+                    <option value="fixed_crop">固定尺寸 (裁剪填充)</option>
                 </select>
             </label>
             <div id="custom-size" style="display:none;">
                 <label for="custom-width">宽 <input type="number" id="custom-width" min="1"></label>
+            </div>
+            <div id="fixed-crop-size" style="display:none;">
+                <label for="fixed-width">宽 <input type="number" id="fixed-width" min="1" value="2560"></label>
+                <label for="fixed-height">高 <input type="number" id="fixed-height" min="1" value="1440"></label>
             </div>
         </div>
         
         <div class="grid">
             <label for="border-width">
                 边框宽度 (px)
-                <input type="number" id="border-width" value="10" min="0" max="100" step="10">
+                <input type="number" id="border-width" value="10" min="0" step="10">
             </label>
             <label for="border-color">
                 边框颜色
                 <input type="color" id="border-color" value="#000000">
+            </label>
+        </div>
+
+        <div style="margin-bottom: 20px;">
+            <label for="no-outer-border">
+                <input type="checkbox" id="no-outer-border" name="no-outer-border">
+                移除外层边框
             </label>
         </div>
 
@@ -497,7 +509,11 @@ function change(target, key) {
 }
 
 document.getElementById('preset-size').addEventListener('change', function() {
-    document.getElementById('custom-size').style.display = (this.value === 'custom') ? 'grid' : 'none';
+    const customSizeEl = document.getElementById('custom-size');
+    const fixedCropSizeEl = document.getElementById('fixed-crop-size');
+    
+    customSizeEl.style.display = (this.value === 'custom') ? 'grid' : 'none';
+    fixedCropSizeEl.style.display = (this.value === 'fixed_crop') ? 'grid' : 'none';
 });
 
 // Quality preview
@@ -536,6 +552,7 @@ function onCombine() {
 
         var BORDER = parseInt(document.getElementById('border-width').value) || 0;
         var BORDER_COLOR = document.getElementById('border-color').value || '#FFFFFF';
+        var removeOuterBorder = document.getElementById('no-outer-border').checked;
         var isHorizontal = orientation === 'horizontally';
         var alignMode = document.querySelector('input[name="align_mode"]:checked').value;
 
@@ -544,83 +561,109 @@ function onCombine() {
         ctx.fillStyle = BORDER_COLOR;
 
         if (isHorizontal) {
-            if (alignMode === 'uniform_width') {
-                // --- UNIFY WIDTH LOGIC (Crop taller images) ---
-                const totalImageWidth = SUM.apply(window, IMAGES.map(item => item.originalImage.width));
-                const uniformWidth = totalImageWidth / IMAGES.length;
+            const selectedPreset = document.getElementById('preset-size').value;
 
-                let minScaledHeight = Infinity;
-                const scaledImages = IMAGES.map(item => {
-                    const scale = uniformWidth / item.originalImage.width;
-                    const scaledHeight = item.originalImage.height * scale;
-                    if (scaledHeight < minScaledHeight) {
-                        minScaledHeight = scaledHeight;
-                    }
-                    return { image: item.originalImage, width: uniformWidth, height: scaledHeight };
-                });
+            if (selectedPreset === 'fixed_crop') {
+                // --- NEW: FIXED SIZE CROP LOGIC ---
+                const finalWidth = parseInt(document.getElementById('fixed-width').value) || 2560;
+                const finalHeight = parseInt(document.getElementById('fixed-height').value) || 1440;
 
-                const cellWidth = uniformWidth;
-                const cellHeight = minScaledHeight;
+                // Account for borders to calculate the actual cell size
+                const horizontalBorderCount = removeOuterBorder ? IMAGES.length - 1 : IMAGES.length + 1;
+                const verticalBorderCount = removeOuterBorder ? 0 : 2;
+                const totalHorizontalBorders = BORDER * horizontalBorderCount;
+                const totalVerticalBorders = BORDER * verticalBorderCount;
 
-                const totalCanvasWidth = (cellWidth * IMAGES.length) + (BORDER * (IMAGES.length + 1));
-                const totalCanvasHeight = cellHeight + (BORDER * 2);
+                const cellWidth = (finalWidth - totalHorizontalBorders) / IMAGES.length;
+                const cellHeight = finalHeight - totalVerticalBorders;
 
-                canvas.width = totalCanvasWidth;
-                canvas.height = totalCanvasHeight;
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                if (cellWidth <= 0 || cellHeight <= 0) {
+                    alert('边框过大，导致图片尺寸为零或负数，请减小边框宽度或增加最终尺寸。');
+                    $btnCombine.removeAttribute('aria-busy');
+                    $btnCombine.innerText = '合并';
+                    return; // Stop execution
+                }
 
-                let offsetX = BORDER;
-                scaledImages.forEach(img => {
-                    ctx.fillStyle = '#FFFFFF';
-                    ctx.fillRect(offsetX, BORDER, cellWidth, cellHeight);
+                canvas.width = finalWidth;
+                canvas.height = finalHeight;
+                ctx.fillRect(0, 0, canvas.width, canvas.height); // This is the border color background
 
-                    const scaleToFitCell = cellWidth / img.image.width;
-                    const sourceHeight = cellHeight / scaleToFitCell;
-                    const sourceY = (img.image.height - sourceHeight) / 2;
-                    
-                    ctx.drawImage(img.image, 0, sourceY, img.image.width, sourceHeight, offsetX, BORDER, cellWidth, cellHeight);
+                let offsetX = removeOuterBorder ? 0 : BORDER;
+                const offsetY = removeOuterBorder ? 0 : BORDER;
+
+                IMAGES.forEach(item => {
+                    ctx.fillStyle = '#FFFFFF'; // Cell background
+                    ctx.fillRect(offsetX, offsetY, cellWidth, cellHeight);
+
+                    const img = item.originalImage;
+                    const scale = Math.max(cellWidth / img.width, cellHeight / img.height);
+                    const sourceW = cellWidth / scale;
+                    const sourceH = cellHeight / scale;
+                    const sourceX = (img.width - sourceW) / 2;
+                    const sourceY = (img.height - sourceH) / 2;
+
+                    ctx.drawImage(img, sourceX, sourceY, sourceW, sourceH, offsetX, offsetY, cellWidth, cellHeight);
                     offsetX += cellWidth + BORDER;
                 });
 
-            } else { // alignMode === 'uniform_height'
-                // --- UNIFY HEIGHT LOGIC (Crop wider images) ---
-                const totalImageHeight = SUM.apply(window, IMAGES.map(item => item.originalImage.height));
-                const uniformHeight = totalImageHeight / IMAGES.length;
-
-                let minScaledWidth = Infinity;
-                const scaledImages = IMAGES.map(item => {
-                    const scale = uniformHeight / item.originalImage.height;
-                    const scaledWidth = item.originalImage.width * scale;
-                    if (scaledWidth < minScaledWidth) {
-                        minScaledWidth = scaledWidth;
-                    }
-                    return { image: item.originalImage, width: scaledWidth, height: uniformHeight };
-                });
-
-                const cellWidth = minScaledWidth;
-                const cellHeight = uniformHeight;
-
-                const totalCanvasWidth = (cellWidth * IMAGES.length) + (BORDER * (IMAGES.length + 1));
-                const totalCanvasHeight = cellHeight + (BORDER * 2);
-
-                canvas.width = totalCanvasWidth;
-                canvas.height = totalCanvasHeight;
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-                let offsetX = BORDER;
-                scaledImages.forEach(img => {
-                    ctx.fillStyle = '#FFFFFF';
-                    ctx.fillRect(offsetX, BORDER, cellWidth, cellHeight);
-
-                    const scaleToFitCell = cellHeight / img.image.height;
-                    const sourceWidth = cellWidth / scaleToFitCell;
-                    const sourceX = (img.image.width - sourceWidth) / 2;
-
-                    ctx.drawImage(img.image, sourceX, 0, sourceWidth, img.image.height, offsetX, BORDER, cellWidth, cellHeight);
-                    offsetX += cellWidth + BORDER;
-                });
+            } else {
+                // --- EXISTING ALIGN & CROP LOGIC ---
+                if (alignMode === 'uniform_width') {
+                    const totalImageWidth = SUM.apply(window, IMAGES.map(item => item.originalImage.width));
+                    const uniformWidth = totalImageWidth / IMAGES.length;
+                    let minScaledHeight = Infinity;
+                    const scaledImages = IMAGES.map(item => {
+                        const scale = uniformWidth / item.originalImage.width;
+                        const scaledHeight = item.originalImage.height * scale;
+                        if (scaledHeight < minScaledHeight) minScaledHeight = scaledHeight;
+                        return { image: item.originalImage, width: uniformWidth, height: scaledHeight };
+                    });
+                    const cellWidth = uniformWidth;
+                    const cellHeight = minScaledHeight;
+                    const horizontalBorderCount = removeOuterBorder ? IMAGES.length - 1 : IMAGES.length + 1;
+                    const verticalBorderCount = removeOuterBorder ? 0 : 2;
+                    canvas.width = (cellWidth * IMAGES.length) + (BORDER * horizontalBorderCount);
+                    canvas.height = cellHeight + (BORDER * verticalBorderCount);
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    let offsetX = removeOuterBorder ? 0 : BORDER;
+                    scaledImages.forEach(img => {
+                        ctx.fillStyle = '#FFFFFF';
+                        ctx.fillRect(offsetX, removeOuterBorder ? 0 : BORDER, cellWidth, cellHeight);
+                        const scaleToFitCell = cellWidth / img.image.width;
+                        const sourceHeight = cellHeight / scaleToFitCell;
+                        const sourceY = (img.image.height - sourceHeight) / 2;
+                        ctx.drawImage(img.image, 0, sourceY, img.image.width, sourceHeight, offsetX, removeOuterBorder ? 0 : BORDER, cellWidth, cellHeight);
+                        offsetX += cellWidth + BORDER;
+                    });
+                } else { // alignMode === 'uniform_height'
+                    const totalImageHeight = SUM.apply(window, IMAGES.map(item => item.originalImage.height));
+                    const uniformHeight = totalImageHeight / IMAGES.length;
+                    let minScaledWidth = Infinity;
+                    const scaledImages = IMAGES.map(item => {
+                        const scale = uniformHeight / item.originalImage.height;
+                        const scaledWidth = item.originalImage.width * scale;
+                        if (scaledWidth < minScaledWidth) minScaledWidth = scaledWidth;
+                        return { image: item.originalImage, width: scaledWidth, height: uniformHeight };
+                    });
+                    const cellWidth = minScaledWidth;
+                    const cellHeight = uniformHeight;
+                    const horizontalBorderCount = removeOuterBorder ? IMAGES.length - 1 : IMAGES.length + 1;
+                    const verticalBorderCount = removeOuterBorder ? 0 : 2;
+                    canvas.width = (cellWidth * IMAGES.length) + (BORDER * horizontalBorderCount);
+                    canvas.height = cellHeight + (BORDER * verticalBorderCount);
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    let offsetX = removeOuterBorder ? 0 : BORDER;
+                    scaledImages.forEach(img => {
+                        ctx.fillStyle = '#FFFFFF';
+                        ctx.fillRect(offsetX, removeOuterBorder ? 0 : BORDER, cellWidth, cellHeight);
+                        const scaleToFitCell = cellHeight / img.image.height;
+                        const sourceWidth = cellWidth / scaleToFitCell;
+                        const sourceX = (img.image.width - sourceWidth) / 2;
+                        ctx.drawImage(img.image, sourceX, 0, sourceWidth, img.image.height, offsetX, removeOuterBorder ? 0 : BORDER, cellWidth, cellHeight);
+                        offsetX += cellWidth + BORDER;
+                    });
+                }
             }
-
         } else { // Vertically (current logic remains, as requested)
             var totalHeight = SUM.apply(window, IMAGES.map(function(item) { return item.originalImage.height; })) + (IMAGES.length + 1) * BORDER;
             var maxWidth = MAX.apply(window, IMAGES.map(function(item){ return item.originalImage.width; }));
@@ -655,6 +698,13 @@ function onCombine() {
             if (customW > 0 && canvas.width > customW) {
                 targetW = customW;
                 targetH = Math.round(canvas.height * (customW / canvas.width));
+            }
+        } else if (selectedOption.value === 'fixed_crop') {
+            const fixedW = parseInt(document.getElementById('fixed-width').value) || 0;
+            const fixedH = parseInt(document.getElementById('fixed-height').value) || 0;
+            if (fixedW > 0 && fixedH > 0) {
+                targetW = fixedW;
+                targetH = fixedH;
             }
         }
         
