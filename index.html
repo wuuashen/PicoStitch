@@ -115,15 +115,35 @@
         grid-template-columns: 1fr 1fr;
         gap: 1rem;
     }
+
+    #theme-selector-container {
+        position: absolute;
+        top: 1.5rem;
+        right: 1.5rem;
+    }
+
+    #theme-selector-container select {
+        margin-bottom: 0;
+    }
 </style>
 </head>
 <body>
 
 <main class="container">
+    <div id="theme-selector-container">
+        <select id="theme-switcher">
+            <option value="auto">自动主题</option>
+            <option value="light">亮色</option>
+            <option value="dark">暗色</option>
+        </select>
+    </div>
+
     <hgroup>
         <h1>图片拼接工具</h1>
         <p>不上传、不留存、不扫描、不识别, 100%安全</p>
     </hgroup>
+
+    
 
     <form name="form-combine" id="form-combine" onsubmit="return onCombine()">
         <div class="grid">
@@ -203,7 +223,51 @@ var $btnCombine = document.querySelector('#btn-combine');
 var $btnReset = document.querySelector('#btn-reset');
 var $list = document.querySelector('#list-files');
 var $result = document.querySelector('#result');
-var $droper = document.querySelector('#droper');
+const $droper = document.querySelector('#droper');
+
+// --- Theme Switcher ---
+const themeSwitcher = {
+    init() {
+        this.switcher = document.getElementById('theme-switcher');
+        this.theme = this.getTheme();
+        this.switcher.value = this.theme;
+        this.applyTheme(this.theme);
+
+        this.switcher.addEventListener('change', e => {
+            this.setTheme(e.target.value);
+        });
+
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+            if (this.getTheme() === 'auto') {
+                this.applyTheme('auto');
+            }
+        });
+    },
+    getTheme() {
+        return localStorage.getItem('theme') || 'auto';
+    },
+    setTheme(theme) {
+        localStorage.setItem('theme', theme);
+        this.theme = theme;
+        this.applyTheme(theme);
+    },
+    applyTheme(theme) {
+        const html = document.documentElement;
+        if (theme === 'auto') {
+            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                html.dataset.theme = 'dark';
+            } else {
+                html.dataset.theme = 'light';
+            }
+        } else {
+            html.dataset.theme = theme;
+        }
+    }
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    themeSwitcher.init();
+});
 
 $list.addEventListener('click', function(e) {
     const button = e.target.closest('button[data-action]');
@@ -604,7 +668,7 @@ function onCombine() {
         }
         scaledCtx.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, targetW, targetH);
 
-        var fileName = 'pintu-fulicat.com-' + (new Date()).getTime();
+        var fileName = 'PicoStitch_' + (new Date()).getTime();
         fileName += (mimetype == 'image/jpeg') ? '.jpg' : '.png';
 
         scaledCanvas.toBlob(function(blob) {
