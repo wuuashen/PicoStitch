@@ -177,6 +177,7 @@
                 尺寸
                 <select id="preset-size">
                     <option value="">原始尺寸</option>
+                    <option value="3840" data-constraint="width">最大宽度: 3840px</option>
                     <option value="2560" data-constraint="width">最大宽度: 2560px</option>
                     <option value="1920" data-constraint="width">最大宽度: 1920px</option>
                     <option value="1080" data-constraint="height">最大高度: 1080px</option>
@@ -189,8 +190,8 @@
                 <label for="custom-width">宽 <input type="number" id="custom-width" min="1"></label>
             </div>
             <div id="fixed-crop-size" style="display:none;">
-                <label for="fixed-width">宽 <input type="number" id="fixed-width" min="1" value="2560"></label>
-                <label for="fixed-height">高 <input type="number" id="fixed-height" min="1" value="1440"></label>
+                <label for="fixed-width">宽 <input type="number" id="fixed-width" min="1" value="3840"></label>
+                <label for="fixed-height">高 <input type="number" id="fixed-height" min="1" value="2160"></label>
             </div>
         </div>
         
@@ -558,7 +559,6 @@ function onCombine() {
 
         var canvas = document.createElement('canvas');
         var ctx = canvas.getContext('2d');
-        ctx.fillStyle = BORDER_COLOR;
 
         if (isHorizontal) {
             const selectedPreset = document.getElementById('preset-size').value;
@@ -586,7 +586,8 @@ function onCombine() {
 
                 canvas.width = finalWidth;
                 canvas.height = finalHeight;
-                ctx.fillRect(0, 0, canvas.width, canvas.height); // This is the border color background
+                ctx.fillStyle = BORDER_COLOR; // Set color for the border background
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
 
                 let offsetX = removeOuterBorder ? 0 : BORDER;
                 const offsetY = removeOuterBorder ? 0 : BORDER;
@@ -624,6 +625,7 @@ function onCombine() {
                     const verticalBorderCount = removeOuterBorder ? 0 : 2;
                     canvas.width = (cellWidth * IMAGES.length) + (BORDER * horizontalBorderCount);
                     canvas.height = cellHeight + (BORDER * verticalBorderCount);
+                    ctx.fillStyle = BORDER_COLOR;
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
                     let offsetX = removeOuterBorder ? 0 : BORDER;
                     scaledImages.forEach(img => {
@@ -651,6 +653,7 @@ function onCombine() {
                     const verticalBorderCount = removeOuterBorder ? 0 : 2;
                     canvas.width = (cellWidth * IMAGES.length) + (BORDER * horizontalBorderCount);
                     canvas.height = cellHeight + (BORDER * verticalBorderCount);
+                    ctx.fillStyle = BORDER_COLOR;
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
                     let offsetX = removeOuterBorder ? 0 : BORDER;
                     scaledImages.forEach(img => {
@@ -669,6 +672,7 @@ function onCombine() {
             var maxWidth = MAX.apply(window, IMAGES.map(function(item){ return item.originalImage.width; }));
             canvas.width = maxWidth + BORDER * 2;
             canvas.height = totalHeight;
+            ctx.fillStyle = BORDER_COLOR;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             var offsetY = BORDER;
