@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PicoStitch - 在线图片拼接工具</title>
 <meta name="description" content="在线免费将多张图片合并为一张长图。支持横向和纵向拼接，自定义边框和尺寸。所有操作均在您的浏览器中完成，我们不上传、不存储您的任何图片。">
-<meta name="keywords" content="在线拼图, 拼接长图, 免费拼图, 合并图片, 长图生成器, 图片合并, 安全拼图, 纯前端拼图">
+<meta name="keywords" content="PicoStitch, 在线拼图, 拼接长图, 免费拼图, 合并图片, 长图生成器, 图片合并, 安全拼图, 纯前端拼图">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
 <style>
     /* Custom styles for specific components */
@@ -169,7 +169,7 @@
 
         <div id="form-group-quality">
             <label for="quality">质量 <span id="quality-preview"></span></label>
-            <input type="range" min="0.1" max="1" step="0.01" value="0.8" name="quality" id="quality">
+            <input type="range" min="0.1" max="1" step="0.01" value="0.9" name="quality" id="quality">
         </div>
 
         <div class="grid">
@@ -208,7 +208,7 @@
 
         <div style="margin-bottom: 20px;">
             <label for="no-outer-border">
-                <input type="checkbox" id="no-outer-border" name="no-outer-border">
+                <input type="checkbox" checked id="no-outer-border" name="no-outer-border">
                 移除外层边框
             </label>
         </div>
