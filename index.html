@@ -7,8 +7,8 @@
 <meta name="description" content="在线免费将多张图片合并为一张长图。支持横向和纵向拼接，自定义边框和尺寸。所有操作均在您的浏览器中完成，我们不上传、不存储您的任何图片。">
 <meta name="keywords" content="PicoStitch, 壁纸制作, 在线拼图, 拼接长图, 免费拼图, 合并图片, 长图生成器, 图片合并, 安全拼图, 纯前端拼图">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"/>
 <style>
-    /* Custom styles for specific components */
     :root {
         --spacing: 0.5rem;
     }
@@ -124,6 +124,11 @@
 
     #theme-selector-container select {
         margin-bottom: 0;
+    }
+    .download-btn{
+      background-color: #f7931a;
+      color: #fff;
+      border-color: #f7931a;
     }
 </style>
 </head>
@@ -734,7 +739,7 @@ function onCombine() {
             html.push('<article>');
             html.push('<p>' + imageInfo + '</p>');
             html.push('<div class="grid">');
-            html.push('  <a href="' + blobURL + '" download="' + fileName + '" role="button">下载图片</a>');
+            html.push('  <a href="' + blobURL + '" download="' + fileName + '" role="button" class="download-btn">下载图片</a>');
             html.push('  <a href="' + blobURL + '" target="_blank" role="button" class="secondary">新窗口打开</a>');
             html.push('</div>');
             html.push('<img src="' + blobURL + '">');
