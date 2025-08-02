@@ -285,6 +285,7 @@ const themeSwitcher = {
 
 document.addEventListener('DOMContentLoaded', () => {
     themeSwitcher.init();
+    loadSettings();
 });
 
 $list.addEventListener('click', function(e) {
@@ -540,6 +541,50 @@ function formatBytes(bytes, decimals = 2) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
 
+// --- Settings Persistence ---
+const SETTINGS_KEY = 'picoStitchSettings';
+
+function saveSettings() {
+    const settings = {
+        orientation: document.querySelector('input[name="orientation"]:checked').value,
+        mimetype: document.querySelector('input[name="mimetype"]:checked').value,
+        quality: document.getElementById('quality').value,
+        presetSize: document.getElementById('preset-size').value,
+        customWidth: document.getElementById('custom-width').value,
+        fixedCropWidth: document.getElementById('fixed-width').value,
+        fixedCropHeight: document.getElementById('fixed-height').value,
+        borderWidth: document.getElementById('border-width').value,
+        borderColor: document.getElementById('border-color').value,
+        noOuterBorder: document.getElementById('no-outer-border').checked,
+        alignMode: document.querySelector('input[name="align_mode"]:checked').value
+    };
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
+
+function loadSettings() {
+    const savedSettings = localStorage.getItem(SETTINGS_KEY);
+    if (!savedSettings) return;
+
+    const settings = JSON.parse(savedSettings);
+
+    document.querySelector(`input[name="orientation"][value="${settings.orientation}"]`).checked = true;
+    document.querySelector(`input[name="mimetype"][value="${settings.mimetype}"]`).checked = true;
+    document.getElementById('quality').value = settings.quality;
+    document.getElementById('preset-size').value = settings.presetSize;
+    document.getElementById('custom-width').value = settings.customWidth;
+    document.getElementById('fixed-width').value = settings.fixedCropWidth;
+    document.getElementById('fixed-height').value = settings.fixedCropHeight;
+    document.getElementById('border-width').value = settings.borderWidth;
+    document.getElementById('border-color').value = settings.borderColor;
+    document.getElementById('no-outer-border').checked = settings.noOuterBorder;
+    document.querySelector(`input[name="align_mode"][value="${settings.alignMode}"]`).checked = true;
+
+    // Trigger change events to update UI visibility
+    document.getElementById('preset-size').dispatchEvent(new Event('change'));
+    document.querySelector('input[name="mimetype"]:checked').dispatchEvent(new Event('click'));
+    updateQualityPreview();
+}
+
 
 function onCombine() {
     if (IMAGES.length === 0) {
@@ -549,6 +594,8 @@ function onCombine() {
 
     $btnCombine.setAttribute('aria-busy', 'true');
     $btnCombine.innerText = '处理中...';
+
+    saveSettings();
 
     // Use a timeout to allow the UI to update before the heavy processing begins
     setTimeout(function() {
